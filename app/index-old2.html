@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rundeck – Pipeline de Anomalias</title>
+  <style>
+    body { font-family: Arial, Helvetica, sans-serif; margin: 20px; line-height: 1.5; }
+    h1 { margin: 0 0 8px 0; }
+    .muted { color: #666; }
+    .box { border: 1px solid #ddd; padding: 12px; border-radius: 8px; margin-top: 12px; }
+    .btn { display:inline-block; padding:10px 14px; border-radius:8px; border:1px solid #111; background:#111; color:#fff; text-decoration:none; font-weight:bold; }
+    .btn.secondary { background:#fff; color:#111; }
+    code, pre { background:#f7f7f8; border:1px solid #eee; border-radius:6px; }
+    code { padding: 2px 6px; }
+    pre { padding: 10px; overflow:auto; }
+    ul { margin:8px 0 0 18px; }
+  </style>
+</head>
+<body>
+  <h1>Anomalias em Jobs do Rundeck</h1>
+  <p class="muted">Este site publica o artefato <code>anomalies.json</code> gerado por uma esteira MLOps (n8n → GitHub Actions → AWS Amplify).</p>
+
+  <div class="box">
+    <h3 style="margin-top:0">Abrir o JSON de anomalias</h3>
+    <p>
+      <a id="openJson" class="btn" target="_blank" rel="noopener">Abrir anomalies.json</a>
+      <a id="openJsonSame" class="btn secondary" title="Redirecionar para o JSON">Redirecionar →</a>
+    </p>
+    <p class="muted">Se o botão não abrir, tente manualmente: 
+      <a href="/anomalies.json">/anomalies.json</a> ou 
+      <a href="/app/anomalies.json">/app/anomalies.json</a>.
+    </p>
+  </div>
+
+  <div class="box">
+    <h3 style="margin-top:0">Como funciona a esteira (resumo)</h3>
+    <ul>
+      <li><strong>Coleta (n8n):</strong> Cron → HTTP Request no Rundeck <code>/api/38/executions</code> → map → append em <code>data/dados_rundeck.csv</code> no GitHub.</li>
+      <li><strong>Detecção (GitHub Actions):</strong> ao receber push, roda <code>scripts/pipeline.py</code> (ETL + features). Usa <em>Z-score</em> por job e global (e opcionalmente <em>IsolationForest</em>) para gerar <code>app/anomalies.json</code>.</li>
+      <li><strong>Publicação (Amplify):</strong> faz deploy da pasta <code>app/</code>; regra de SPA mantém <code>index.html</code>. Regra explícita libera <code>/anomalies.json</code> sem rewrite.</li>
+    </ul>
+    <p class="muted">Variáveis principais: <code>RUNDECK_BASE_URL</code>, <code>RUNDECK_API_TOKEN</code>, <code>RUNDECK_PROJECT</code>, <code>ANOMALY_THRESHOLD</code>.</p>
+  </div>
+
+  <div class="box">
+    <h3 style="margin-top:0">Estrutura do repositório</h3>
+<pre><code>app/
+  index.html
+  anomalies.json
+data/
+  dados_rundeck.csv
+  anomalies.json
+scripts/
+  simulate_data.py
+  pipeline.py
+  detect_anomalies.py
+.github/workflows/mlops.yml
+n8n/workflow_rundeck_to_github.json
+README.md
+</code></pre>
+  </div>
+
+  <script>
+    async function resolveJsonUrl(){
+      try {
+        const r = await fetch('/anomalies.json', { cache:'no-store' });
+        const ct = (r.headers.get('content-type')||'').toLowerCase();
+        if (r.ok && ct.includes('application/json')) return '/anomalies.json';
+      } catch(e) {}
+      try {
+        const r2 = await fetch('/app/anomalies.json', { cache:'no-store' });
+        const ct2 = (r2.headers.get('content-type')||'').toLowerCase();
+        if (r2.ok && ct2.includes('application/json')) return '/app/anomalies.json';
+      } catch(e) {}
+      return (location.pathname.startsWith('/app/') ? '/app/anomalies.json' : '/anomalies.json');
+    }
+
+    (async () => {
+      const url = await resolveJsonUrl();
+      document.getElementById('openJson').href = url;
+      document.getElementById('openJsonSame').href = url;
+    })();
+  </script>
+</body>
+</html>
