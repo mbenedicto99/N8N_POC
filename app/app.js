@@ -1,170 +1,116 @@
-/* eslint-disable no-console */
-const fmt = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
+// app.js (ESM) — sem S3, same-origin
 
-const dtFmt = new Intl.DateTimeFormat('pt-BR', {
-  dateStyle: 'short', timeStyle: 'short', hour12: false,
-  timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
-});
+// ---------- helpers ----------
+const $ = (sel) => document.querySelector(sel);
+const fmt = (v, d = 0) =>
+  (v ?? 0).toLocaleString("pt-BR", {
+    maximumFractionDigits: d,
+    minimumFractionDigits: d,
+  });
 
-async function headJSON(path = 'ai_analysis.json') {
-  const cacheBuster = `_=${Date.now()}`;
-  const url = path.includes('?') ? `${path}&${cacheBuster}` : `${path}?${cacheBuster}`;
-  const res = await fetch(url, { method: 'HEAD', cache: 'no-store' });
-  if (!res.ok) throw new Error(`Falha ao consultar HEAD de ${path}: ${res.status}`);
-  return {
-    lastModified: res.headers.get('Last-Modified'),
-    etag: res.headers.get('ETag')
-  };
+// Aceita "0,9", remove lixo, trata NaN/Infinity/null
+const toNum = (v, fallback = 0) => {
+  if (v === null || v === undefined) return fallback;
+  if (typeof v === "string")
+    v = v.replace(",", ".").replace(/[^0-9eE.\-+]/g, "");
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const esc = (s) =>
+  (s ?? "").toString().replace(/[&<>"]/g, (m) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+  })[m]);
+
+function fillTable(sel, arr, rowFn, cols = 7) {
+  const tbody = document.querySelector(sel);
+  tbody.innerHTML = "";
+  if (!Array.isArray(arr) || arr.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="${cols}" style="text-align:center;color:#94a3b8">Sem dados</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = arr.map(rowFn).join("");
 }
 
-function setBadge(text) {
-  const el = document.getElementById('badge-updated');
+// ---------- data ----------
+const DATA_URL = new URL("./app/ai_analysis.json?ts=" + Date.now(), document.baseURI);
+
+async function loadData() {
+  setStatus("Atualizando…");
+  try {
+    const res = await fetch(DATA_URL, {
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) throw new Error("Falha ao carregar ai_analysis.json: " + res.status);
+    const data = await res.json();
+    renderAll(data);
+    setStatus("Atualizado");
+  } catch (e) {
+    console.error(e);
+    setStatus("Erro ao carregar dados");
+    renderAll(null);
+  }
+}
+
+function setStatus(text) {
+  const el = $("#badge-updated");
   if (el) el.textContent = text;
 }
 
-async function updateLastModified() {
-  try {
-    const { lastModified } = await headJSON('ai_analysis.json');
-    if (lastModified) {
-      const dt = new Date(lastModified);
-      setBadge(`Última atualização: ${dtFmt.format(dt)}`);
-    } else {
-      setBadge('Última atualização: indisponível');
-    }
-  } catch (e) {
-    console.error(e);
-    setBadge('Última atualização: erro ao consultar');
-  }
+// ---------- render ----------
+let chartHotspots, chartRisk;
+
+function renderAll(d) {
+  // KPIs
+  const r = d?.resumo || {};
+  $("#kpi-total").textContent = fmt(toNum(r.registros));
+  $("#kpi-failed").textContent = fmt(toNum(r.falhas));
+  $("#kpi-high").textContent = fmt(toNum(r.alto_tempo ?? r.altoTempo));
+  $("#kpi-cross").textContent = fmt(toNum(r.eventos_cruzados ?? r.eventosCruzados));
+  $("#kpi-cross-rate").textContent = fmt(toNum(r.taxa_cruzada ?? r.taxaCruzada, 2), 2);
+  $("#kpi-phi").textContent = fmt(toNum(r.phi ?? r["phi_falha_alto"] ?? r.phi_falha_alto, 3), 3);
+  $("#kpi-lift").textContent = fmt(
+    toNum(r.lift ?? r.lift_falha_alto ?? r["lift_falha_alto"], 2),
+    2
+  );
+
+  // Tabelas
+  fillTable(
+    "#tbl-hotspots tbody",
+    d?.hotspots,
+    (x) => `
+    <tr>
+      <td>${esc(x.projeto)}</td>
+      <td>${esc(x.job)}</td>
+      <td>${fmt(toNum(x.eventos))}</td>
+      <td>${fmt(toNum(x.risco_medio ?? x.riscoMedio, 3), 3)}</td>
+      <td>${fmt(toNum(x.risco_p95 ?? x.riscoP95, 3), 3)}</td>
+      <td>${fmt(toNum(x.duracao_media_s ?? x.duracaoMediaS ?? x.duracao, 0))}</td>
+    </tr>`,
+    6
+  );
+
+  fillTable(
+    "#tbl-samples tbody",
+    d?.top_amostras ?? d?.amostras ?? d?.samples,
+    (s) => `
+    <tr>
+      <td>${esc(s.projeto)}</td>
+      <td>${esc(s.job)}</td>
+      <td>${esc(s.exec_id ?? s.execId ?? "")}</td>
+      <td>${esc(s.inicio ?? s.start ?? "")}</td>
+      <td>${esc(s.status ?? "")}</td>
+      <td>${fmt(toNum(s.duracao_s ?? s.duracao ?? 0))}</td>
+      <td>${fmt(toNum(s.risco ?? s.risk, 3), 3)}</td>
+    </tr>`,
+    7
+  );
+
+  // Gráficos
+  renderCharts(d);
 }
-
-async function loadJSON(path = 'ai_analysis.json') {
-  const cacheBuster = `_=${Date.now()}`;
-  const url = path.includes('?') ? `${path}&${cacheBuster}` : `${path}?${cacheBuster}`;
-  const res = await fetch(url, { cache: 'no-store' });
-  if (!res.ok) throw new Error(`Falha ao carregar ${path}: ${res.status}`);
-  return res.json();
-}
-
-function setKPI(id, value, fractionDigits = 2) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  const v = typeof value === 'number'
-    ? new Intl.NumberFormat('pt-BR', { maximumFractionDigits: fractionDigits }).format(value)
-    : (value ?? '–');
-  el.textContent = v;
-}
-
-function buildHotspotsTable(hotspots = []) {
-  const tbody = document.querySelector('#tbl-hotspots tbody');
-  tbody.innerHTML = '';
-  hotspots.forEach(h => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${h.project ?? ''}</td>
-      <td title="\${h.job_name}">\${h.job_name ?? ''}</td>
-      <td class="num">\${h.events ?? 0}</td>
-      <td class="num">\${fmt.format(h.avg_risk ?? 0)}</td>
-      <td class="num">\${fmt.format(h.p95_risk ?? 0)}</td>
-      <td class="num">\${fmt.format(h.avg_duration ?? 0)}</td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-function buildSamplesTable(samples = []) {
-  const tbody = document.querySelector('#tbl-samples tbody');
-  tbody.innerHTML = '';
-  samples.forEach(s => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${s.project ?? ''}</td>
-      <td title="\${s.job_name}">\${s.job_name ?? ''}</td>
-      <td class="mono">\${s.job_id ?? ''}</td>
-      <td>\${s.start_time ?? ''}</td>
-      <td>\${s.status ?? ''}</td>
-      <td class="num">\${fmt.format(s.duration_sec ?? 0)}</td>
-      <td class="num">\${fmt.format(s.risk_score ?? 0)}</td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-let charts = [];
-
-function destroyCharts() {
-  charts.forEach(c => c?.destroy());
-  charts = [];
-}
-
-function buildCharts(hotspots = []) {
-  destroyCharts();
-  const top = hotspots.slice(0, 10);
-  const labels = top.map(h => `${h.project ?? ''} :: ${h.job_name ?? ''}`);
-
-  const ctx1 = document.getElementById('chartHotspots').getContext('2d');
-  charts.push(new Chart(ctx1, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [{
-        label: 'Eventos cruzados',
-        data: top.map(h => h.events ?? 0)
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: true } },
-      scales: { x: { ticks: { autoSkip: false } } }
-    }
-  }));
-
-  const ctx2 = document.getElementById('chartRisk').getContext('2d');
-  charts.push(new Chart(ctx2, {
-    type: 'bar',
-    data: {
-      labels,
-      datasets: [
-        { label: 'Risco médio', data: top.map(h => h.avg_risk ?? 0) },
-        { label: 'Risco p95', data: top.map(h => h.p95_risk ?? 0) }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: { legend: { display: true } },
-      scales: { x: { ticks: { autoSkip: false } } }
-    }
-  }));
-}
-
-function applyData(json) {
-  const sum = json?.summary ?? {};
-  setKPI('kpi-total', sum.total_records ?? 0, 0);
-  setKPI('kpi-failed', sum.failed_count ?? 0, 0);
-  setKPI('kpi-high', sum.high_runtime_count ?? 0, 0);
-  setKPI('kpi-cross', sum.cross_events_count ?? 0, 0);
-  setKPI('kpi-cross-rate', (sum.cross_events_rate ?? 0) * 100, 3);
-  setKPI('kpi-phi', sum.phi_failed_high_runtime ?? 0, 3);
-  setKPI('kpi-lift', sum.lift_failed_given_high_runtime ?? 0, 3);
-
-  const hotspots = Array.isArray(json?.hotspots) ? json.hotspots : [];
-  buildHotspotsTable(hotspots);
-  buildCharts(hotspots);
-
-  const samples = Array.isArray(json?.top_risk_samples) ? json.top_risk_samples : [];
-  buildSamplesTable(samples);
-}
-
-async function init() {
-  try {
-    updateLastModified();
-    const data = await loadJSON('ai_analysis.json');
-    applyData(data);
-  } catch (err) {
-    console.error(err);
-    alert('Não foi possível carregar ai_analysis.json. Verifique se o pipeline já gerou o arquivo.');
-  }
-  document.getElementById('btn-reload')?.addEventListener('click', init, { once: true });
-}
-document.addEventListener('DOMContentLoaded', init);
