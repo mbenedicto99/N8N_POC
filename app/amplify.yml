@@ -1,8 +1,54 @@
 version: 1
 frontend:
   phases:
-    preBuild: { commands: [ "echo no build" ] }
-    build:    { commands: [ "echo copy artifacts" ] }
+    preBuild:
+      commands:
+        - |
+          set -euo pipefail
+          echo "Top-level:"
+          ls -la
+          test -d app || (echo "ERRO: diretório './app' não encontrado"; exit 1)
+          echo "Conteúdo de ./app:"
+          ls -la app
+    build:
+      commands:
+        - |
+          set -euo pipefail
+          ROOT="$PWD"
+          APP_DIR="$ROOT/app"
+          OUT="$ROOT/webout"
+          rm -rf "$OUT" && mkdir -p "$OUT"
+
+          if [ -f "$APP_DIR/package.json" ]; then
+            echo "Build Node detectado em ./app"
+            cd "$APP_DIR"
+            if [ -f package-lock.json ]; then npm ci; else npm install; fi
+            npm run build
+            if [ -d dist ]; then BUILD_DIR="dist"
+            elif [ -d build ]; then BUILD_DIR="build"
+            else
+              echo "ERRO: não encontrei 'dist' nem 'build' após npm run build"
+              exit 1
+            fi
+            cd "$ROOT"
+            cp -r "$APP_DIR/$BUILD_DIR/"* "$OUT"/
+          else
+            echo "Site estático puro em ./app — copiando arquivos"
+            cp -r "$APP_DIR/"* "$OUT"/
+          fi
+
+          mkdir -p "$OUT/app"
+          if [ -f "$APP_DIR/app/ai_analysis.json" ]; then
+            cp -f "$APP_DIR/app/ai_analysis.json" "$OUT/app/ai_analysis.json"
+          fi
+
+          echo "Artifact final em $OUT"
+          ls -la "$OUT" || true
+          ls -la "$OUT/app" || true
   artifacts:
-    baseDirectory: app
-    files: [ '**/*' ]
+    baseDirectory: webout
+    files:
+      - '**/*'
+  cache:
+    paths:
+      - app/node_modules/**/*
