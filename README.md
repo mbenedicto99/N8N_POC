@@ -1,6 +1,4 @@
-# POC n8n – README
-
-Este README descreve como **subir uma POC do n8n** em Ubuntu 24.04 usando Docker, a **arquitetura proposta (Mermaid)**, scripts iniciais, variáveis de ambiente e **passo a passo** para configurar o n8n pela interface gráfica.
+# POC n8n
 
 ---
 
