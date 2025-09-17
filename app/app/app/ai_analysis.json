@@ -1,0 +1,13 @@
+{
+  "meta": { "modelo": "BernoulliRBM", "periodo": "último trimestre", "gerado_em": "2025-09-17T00:00:00Z" },
+  "resumo": { "registros": 2500, "falhas": 87, "alto_tempo": 42, "eventos_cruzados": 19, "taxa_cruzada": 0.34, "phi": 0.21, "lift": 1.8 },
+  "hotspots": [
+    { "projeto": "core", "job": "daily_settlement", "eventos": 12, "risco_medio": 0.73, "risco_p95": 0.92, "duracao_media_s": 410 }
+  ],
+  "risco_p95_por_job": [
+    { "job": "daily_settlement", "p95": 732, "duracao_media": 410 }
+  ],
+  "top_amostras": [
+    { "projeto": "core", "job": "daily_settlement", "exec_id": "abc", "inicio": "2025-09-17T10:00:00Z", "status": "FAILED", "duracao_s": 930, "risco": 0.92 }
+  ]
+}
