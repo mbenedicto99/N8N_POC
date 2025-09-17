@@ -5,7 +5,7 @@ Painel estático para **leitura operacional** de riscos em jobs (Rundeck): combi
 
 ---
 
-## 📐 Arquitetura (visão de ponta a ponta)
+## 📐 Arquitetura (E2E)
 
 ```mermaid
 flowchart LR
@@ -18,7 +18,7 @@ flowchart LR
     J[(/app/ai_analysis.json)]
   end
 
-  subgraph Pipeline["Pipeline de Dados (CI/CD ou Scheduler)"]
+  subgraph Pipeline["Pipeline de Dados"]
     R[Rundeck / CI]
     E[etl.py<br/>→ limpeza/joins]
     F[features.py<br/>→ engenharia de atributos]
