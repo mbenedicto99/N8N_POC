@@ -1,0 +1,15 @@
+{
+  "name": "rundeck-ai-panel",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Painel estático que lê ./app/ai_analysis.json no mesmo domínio (sem S3).",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true}); require('fs').mkdirSync('dist',{recursive:true}); require('fs').cpSync('public','dist',{recursive:true});\"",
+    "dev": "node -e \"console.log('Use qualquer servidor estático. Ex.: npx http-server public -p 8080')\"",
+    "test": "node -e \"console.log('sem testes')\""
+  }
+}
