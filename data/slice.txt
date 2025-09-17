@@ -1,3 +1,4 @@
+TIPO;GRUPO;HUB;AMBIENTE;ORIGEM;STATUS;INICIO;FIM;DATA
 LIQUIDACAO;RECEPCAO_CRDE;PROCESSADORA;ELO-PRD;name: srvpalcvjobsa01.elo.corp:prodcdctm,srvpalcvjobsa02.elo.corp:prodcdctm,srvpalcvjobsa03.elo.corp:prodcdctm,srvpalcvjobsa04.elo.corp:prodcdctm;succeed;01/09/25 11:04:19;01/09/25 11:04:33;01/09/25
 LIQUIDACAO;RECEPCAO_CRDE;PROCESSADORA;ELO-PRD;name: srvpalcvjobsa01.elo.corp:prodcdctm,srvpalcvjobsa02.elo.corp:prodcdctm,srvpalcvjobsa03.elo.corp:prodcdctm,srvpalcvjobsa04.elo.corp:prodcdctm;succeed;01/09/25 15:43:24;01/09/25 15:43:39;01/09/25
 LIQUIDACAO;RECEPCAO_CRDE;PROCESSADORA;ELO-PRD;name: srvpalcvjobsa01.elo.corp:prodcdctm,srvpalcvjobsa02.elo.corp:prodcdctm,srvpalcvjobsa03.elo.corp:prodcdctm,srvpalcvjobsa04.elo.corp:prodcdctm;succeed;02/09/25 00:35:18;02/09/25 00:35:31;01/09/25
