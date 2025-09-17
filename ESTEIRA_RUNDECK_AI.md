@@ -3,26 +3,26 @@
 ## 1) Objetivo
 Detectar **falhas e anomalias** nas execuções de jobs do Rundeck e publicar uma visão executiva em tempo quase real, usando **n8n** para coleta, **GitHub** para versionamento/CI e **AWS Amplify** para publicação do front-end estático.
 
-## 2) Arquitetura & Fluxo
+## 2) Arquitetura & Fluxo (Mermaid)
 ```mermaid
 flowchart LR
   %% ---- Coleta ----
-  subgraph A["Coleta & Ingestão"]
-    N8N["n8n (Cron + HTTP Request)"] --> RD[(Rundeck API)]
+  subgraph A[Coleta & Ingestão]
+    N8N[n8n (Cron + HTTP Request)] --> RD[(Rundeck API)]
     N8N -->|append CSV| GH[GitHub Repo<br/>data/dados_rundeck.csv]
   end
 
   %% ---- CI/CD e Inferência ----
-  subgraph B["CI/CD, Treino & Detecção"]
-    GH -->|push| GHA["GitHub Actions"]
-    GHA --> PIPE["pipeline.py<br/>ETL + Features + Anomalias<br/>(IsolationForest/Z-score)"]
-    PIPE --> OUT1[("data/anomalies.json")]
-    PIPE --> OUT2[("app/anomalies.json")]
+  subgraph B[CI/CD, Treino & Detecção]
+    GH -->|push| GHA[GitHub Actions]
+    GHA --> PIPE[pipeline.py<br/>ETL + Features + Anomalias<br/>(IsolationForest/Z-score)]
+    PIPE --> OUT1[(data/anomalies.json)]
+    PIPE --> OUT2[(app/anomalies.json)]
     GHA -->|commit artifacts| GH
   end
 
   %% ---- Publicação ----
-  subgraph C["Publicação & Consumo"]
+  subgraph C[Publicação & Consumo]
     GH --> AMP[AWS Amplify<br/>Build & Deploy]
     AMP --> WEB[App estático<br/>index.html + anomalies.json]
     WEB --> USERS[Operação 24x7 / Diretoria]

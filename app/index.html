@@ -1,0 +1,34 @@
+<!doctype html><html lang="pt-br"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Anomalias Rundeck</title>
+<style>
+ body{font-family:system-ui,sans-serif;margin:24px}
+ header{display:flex;justify-content:space-between;align-items:center;gap:12px}
+ table{border-collapse:collapse;width:100%;margin-top:12px}
+ th,td{border:1px solid #ccc;padding:6px 8px;text-align:left;font-size:14px}
+ th{background:#f6f6f6;position:sticky;top:0}
+ input{padding:6px 8px}
+</style>
+<body>
+<header>
+  <h1>Anomalias em Jobs do Rundeck</h1>
+  <div><input id="q" placeholder="filtrar por projeto/job/status..."><button onclick="load()">Atualizar</button></div>
+</header>
+<p>Lendo <code>anomalies.json</code> gerado pela pipeline.</p>
+<table id="t"><thead><tr>
+  <th>Data</th><th>Projeto</th><th>Job</th><th>Status</th><th>Duração (s)</th><th>Retries</th><th>CPU%</th><th>MEM%</th><th>Node</th><th>Erro</th>
+</tr></thead><tbody></tbody></table>
+<script>
+async function load(){
+  const q=(document.getElementById('q').value||'').toLowerCase();
+  const data=await (await fetch('anomalies.json',{cache:'no-store'})).json();
+  const tb=document.querySelector('#t tbody'); tb.innerHTML='';
+  data.filter(r=>JSON.stringify(r).toLowerCase().includes(q)).forEach(r=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${r.ts}</td><td>${r.project}</td><td>${r.job_name}</td><td>${r.status}</td>
+    <td>${r.duration_sec}</td><td>${r.retries}</td><td>${r.cpu_pct}</td><td>${r.mem_pct}</td>
+    <td>${r.node}</td><td>${(r.error_message||'').slice(0,80)}</td>`;
+    tb.appendChild(tr);
+  });
+} load();
+</script></body></html>
