@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
-import os, subprocess, sys
-CUR=os.path.dirname(__file__); DATA=os.path.join(CUR,"..","data","dados_rundeck.csv")
-if not os.path.exists(DATA):
-    subprocess.check_call([sys.executable, os.path.join(CUR,"simulate_data.py")])
-# (opcional) IsolationForest para CI — não executamos aqui para manter leve
-# subprocess.check_call([sys.executable, os.path.join(CUR,"train_isoforest.py")])
-subprocess.check_call([sys.executable, os.path.join(CUR,"detect_anomalies.py")])
+import os, sys, subprocess
+
+BASE = os.path.join(os.path.dirname(__file__), "..")
+
+def run(cmd):
+    print("+", " ".join(cmd)); subprocess.check_call(cmd)
+
+run([sys.executable, os.path.join(BASE, "scripts", "etl.py")])
+
+try:
+    run([sys.executable, os.path.join(BASE, "scripts", "train_isoforest.py")])
+except Exception as e:
+    print("Aviso: não foi possível treinar IsolationForest. Seguindo com Z-score.", e)
+
+run([sys.executable, os.path.join(BASE, "scripts", "detect_anomalies.py")])
 print("Pipeline concluída.")
