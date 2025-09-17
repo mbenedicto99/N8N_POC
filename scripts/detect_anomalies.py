@@ -3,6 +3,7 @@ import json
 import joblib
 import numpy as np
 import pandas as pd
+from scipy.special import expit  # para reconstrução sigmoide
 
 MODEL_PATH = os.getenv("MODEL_PATH", "models/rbm.joblib")
 FEATURE_META = os.getenv("FEATURE_META", "models/feature_meta.json")
@@ -12,10 +13,19 @@ OUTPUT_JSON = os.getenv("OUTPUT_JSON", "app/ai_analysis.json")
 TOP_N = int(os.getenv("TOP_N", "20"))
 
 def reconstruction_error(rbm, X):
-    H = rbm.transform(X)
-    V_recon = rbm.gibbs(H)
-    err = ((X - V_recon) ** 2).mean(axis=1)
-    return err, V_recon
+    """
+    Reconstrói V a partir de H=rbm.transform(X) usando:
+      V_prob = sigmoid(H @ components_ + intercept_visible_)
+    e calcula o erro MSE por amostra.
+    """
+    X = np.asarray(X, dtype=np.float64)
+    X = np.nan_to_num(X, nan=0.0, posinf=1.0, neginf=0.0)
+
+    H_prob = rbm.transform(X)  # (n_samples, n_components)
+    V_prob = expit(np.dot(H_prob, rbm.components_) + rbm.intercept_visible_)  # (n_samples, n_features)
+
+    err = ((X - V_prob) ** 2).mean(axis=1)
+    return err, V_prob
 
 def phi_coefficient(a, b):
     a = np.asarray(a).astype(int)
@@ -39,6 +49,7 @@ def main():
     feats = pd.read_csv(INPUT_FEATS, parse_dates=["start_time","end_time"])
 
     X = feats[meta["feature_cols"]].astype(float).values
+    X = np.clip(X, 0.0, 1.0)  # segurança adicional
     err, _ = reconstruction_error(rbm, X)
 
     e_min, e_max = float(err.min()), float(err.max())
@@ -86,7 +97,7 @@ def main():
     analysis = {
         "meta": {
             "model": "BernoulliRBM",
-            "version": 1,
+            "version": 2,
             "z_threshold_high_runtime": meta.get("z_threshold", 2.0),
             "feature_cols": meta.get("feature_cols", []),
         },
