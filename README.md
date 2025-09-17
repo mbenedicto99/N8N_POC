@@ -1,16 +1,18 @@
-# POC n8n
+# POC n8n – README
+
+Este README descreve como **subir uma POC do n8n** em Ubuntu 24.04 usando Docker, a **arquitetura proposta (Mermaid)**, scripts iniciais, variáveis de ambiente e **passo a passo** para configurar o n8n pela interface gráfica.
 
 ---
 
-## 1) OBJETIVO E ESCOPO
+## 1) Objetivo e escopo
 - Subir o n8n localmente (localhost) de forma segura o suficiente para POC.
 - Persistência em **PostgreSQL** (recomendado) e volume local para dados do n8n.
 - Fluxo de exemplo: **Webhook → Function/HTTP → Respond** (ecoar/transformar payload e opcionalmente chamar API externa).
-- Sem balanceamento de carga nem HA (escopo de POC).
+- Sem balanceamento de carga nem HA (escopo de POC). 
 
 ---
 
-## 2) ARQUITETURA
+## 2) Arquitetura (Mermaid)
 ```mermaid
 flowchart LR
   U[Usuário/Browser] -->|HTTP/HTTPS :5678| N[n8n]
@@ -25,7 +27,7 @@ flowchart LR
 
 ---
 
-## 3) PRÉ-REQUISITOS
+## 3) Pré‑requisitos
 - Ubuntu 24.04 com Docker + Compose v2 (ex.: `docker --version` e `docker compose version`).
 - Porta **5678** livre.
 - Acesso à internet para baixar imagens Docker.
@@ -45,7 +47,7 @@ flowchart LR
 
 ---
 
-## 4) ESTRUTURA DE ARQUIVOS DO PROJETO
+## 4) Estrutura de arquivos do projeto
 ```
 ./poc-n8n/
 ├─ .env                  # variáveis de ambiente (edite!)
@@ -65,7 +67,7 @@ mkdir -p ~/poc-n8n && cd ~/poc-n8n
 
 ---
 
-## 5) DETALHE DE ARQUIVOS
+## 5) Arquivos – conteúdo sugerido
 
 ### 5.1) `.env` (modelo)
 > **Edite as senhas/chaves antes de iniciar**
@@ -206,7 +208,7 @@ echo "[n8n] Restore concluído."
 
 ---
 
-## 6) SUBINDO AMBIENTE
+## 6) Subindo o ambiente
 ```bash
 # dentro de ~/poc-n8n
 ./start.sh
@@ -218,7 +220,7 @@ No primeiro acesso, o n8n solicita criar o **Owner** (admin da instância). Conc
 
 ---
 
-## 7) CONFIGURAÇÃO INICIAL UI
+## 7) Configuração inicial via UI (passo a passo)
 1. **Timezone**: Settings → *Personal* → *Preferences* → defina `America/Sao_Paulo`.
 2. **Instance URL** (opcional, mas recomendado): Settings → *General* → *Instance URL*: `http://localhost:5678/`. Isso garante webhooks corretos.
 3. **Retention de execuções**: Settings → *General* → *Execution data*: habilite prune (ex.: 14 dias) para evitar crescimento do banco.
@@ -226,7 +228,7 @@ No primeiro acesso, o n8n solicita criar o **Owner** (admin da instância). Conc
 
 ---
 
-## 8) PRIMEIRO WORKFLOW (exemplo: Webhook → Function → Respond)
+## 8) Primeiro workflow (exemplo: Webhook → Function → Respond)
 **Objetivo**: Receber JSON, enriquecer com timestamp e devolver resposta.
 
 1. **Create** → *New Workflow* → nomeie: `POC – Webhook echo`.
@@ -253,16 +255,12 @@ No primeiro acesso, o n8n solicita criar o **Owner** (admin da instância). Conc
    - Conecte a saída da Function para este node.
 5. **Testar (modo teste)**:
    ```bash
-   curl -X POST "http://localhost:5678/webhook-test/poc/demo" \
-     -H "Content-Type: application/json" \
-     -d '{"message":"hello"}'
+   curl -X POST "http://localhost:5678/webhook-test/poc/demo"      -H "Content-Type: application/json"      -d '{"message":"hello"}'
    ```
    Deve retornar o JSON com `received`, `ts` e `note`.
 6. **Produção**: clique **Activate** (toggle no topo). Use:
    ```bash
-   curl -X POST "http://localhost:5678/webhook/poc/demo" \
-     -H "Content-Type: application/json" \
-     -d '{"message":"prod"}'
+   curl -X POST "http://localhost:5678/webhook/poc/demo"      -H "Content-Type: application/json"      -d '{"message":"prod"}'
    ```
 
 > **Extensões**: adicione um node **HTTP Request** para chamar uma API externa ou um node **Slack**/**Email** para notificação.
@@ -277,7 +275,7 @@ No primeiro acesso, o n8n solicita criar o **Owner** (admin da instância). Conc
 
 ---
 
-## 10) Troubleshooting
+## 10) Troubleshooting rápido
 - **Porta 5678 ocupada**: ajuste `N8N_PORT` no `.env` e refaça `./start.sh`.
 - **Loop de restart do n8n**: ver `./logs.sh`; valide conexão ao Postgres e `N8N_ENCRYPTION_KEY` imutável.
 - **Permissões de volume**: apague volumes e suba novamente (em POC) ou ajuste dono/UID.
@@ -289,4 +287,3 @@ No primeiro acesso, o n8n solicita criar o **Owner** (admin da instância). Conc
 - Criar credenciais (Slack, GitHub, Postgres, SMTP) e montar fluxos reais (ETL leve, alertas, integrações).
 - Se necessário, adicionar **Redis** e proxy HTTPS.
 - Versionar *workflows* exportados (`.json`) num repositório Git privado.
-
