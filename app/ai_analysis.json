@@ -1,0 +1,28 @@
+{
+  "meta": {
+    "model": "BernoulliRBM",
+    "version": 2,
+    "z_threshold_high_runtime": 2.0,
+    "feature_cols": [
+      "duration_sec_mm",
+      "duration_z_clipped_mm",
+      "hour_sin_mm",
+      "hour_cos_mm",
+      "wday_sin_mm",
+      "wday_cos_mm",
+      "failed",
+      "high_runtime"
+    ]
+  },
+  "summary": {
+    "total_records": 892,
+    "failed_count": 622,
+    "high_runtime_count": 23,
+    "cross_events_count": 0,
+    "cross_events_rate": 0.0,
+    "phi_failed_high_runtime": -0.24693,
+    "lift_failed_given_high_runtime": 0.0
+  },
+  "hotspots": [],
+  "top_risk_samples": []
+}
