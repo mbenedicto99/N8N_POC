@@ -1,8 +1,17 @@
 version: 1
-frontend:
-  phases:
-    preBuild: { commands: [ "echo no build" ] }
-    build:    { commands: [ "echo copy artifacts" ] }
-  artifacts:
-    baseDirectory: app
-    files: [ '**/*' ]
+applications:
+  - appRoot: app
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - echo "Static panel – no build step"
+        build:
+          commands:
+            - echo "Copying as-is"
+      artifacts:
+        baseDirectory: .
+        files:
+          - '**/*'
+      cache:
+        paths: []

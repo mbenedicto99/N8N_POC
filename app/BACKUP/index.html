@@ -6,7 +6,7 @@
   <title>Rundeck AI – Análise de Falhas x Alto Tempo (RBM)</title>
   <meta name="description" content="Painel estático que consome ai_analysis.json e exibe KPIs, hotspots e amostras de risco." />
   <link rel="stylesheet" href="styles.css" />
-  <!-- Chart.js via CDN -->
+  <!-- Chart.js via CDN (leve e suficiente para 2 gráficos simples) -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
   <script src="app.js" type="module" defer></script>
 </head>
@@ -14,11 +14,6 @@
   <header class="container header">
     <h1>Rundeck AI – Falhas x Alto Tempo</h1>
     <p class="sub">Modelo: BernoulliRBM | Fonte: app/ai_analysis.json | Build estático (Amplify)</p>
-
-    <!-- Badge de atualização -->
-    <div class="badges">
-      <span class="badge" id="badge-updated" title="Última atualização do ai_analysis.json">Atualizando…</span>
-    </div>
   </header>
 
   <main class="container">
@@ -116,3 +111,4 @@
   </footer>
 </body>
 </html>
+

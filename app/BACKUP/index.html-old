@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rundeck – Anomalias (n8n + GitHub Actions + Amplify)</title>
+  <style>
+    :root { --fg:#111; --muted:#5f6b7a; --bd:#e5e7eb; --bg:#fff; }
+    * { box-sizing:border-box }
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Arial, 'Noto Sans'; color:var(--fg); background:var(--bg); margin:24px; line-height:1.45 }
+    header { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap }
+    h1 { margin:0 0 4px 0; font-size:28px }
+    p.lead { margin:0; color:var(--muted) }
+    .btn { appearance:none; border:1px solid #111; background:#111; color:#fff; padding:10px 14px; border-radius:10px; text-decoration:none; font-weight:600 }
+    .btn.secondary { background:#fff; color:#111 }
+    .card { border:1px solid var(--bd); border-radius:12px; padding:16px; margin-top:16px }
+    .row { display:grid; grid-template-columns: repeat(auto-fit, minmax(260px,1fr)); gap:12px }
+    code, pre { background:#f7f7f8; border:1px solid var(--bd); border-radius:8px }
+    code { padding:2px 6px }
+    pre { padding:12px; overflow:auto }
+    table { width:100%; border-collapse:collapse; margin-top:10px }
+    th, td { border:1px solid var(--bd); padding:6px 8px; text-align:left; font-size:14px }
+    th { background:#fafafa; position:sticky; top:0 }
+    .muted { color:var(--muted) }
+    .controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap }
+    input[type="text"] { padding:8px 10px; border:1px solid var(--bd); border-radius:8px; min-width:260px }
+    .pill { font-size:12px; padding:2px 8px; border-radius:12px; border:1px solid var(--bd); background:#fafafa; color:#333 }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Anomalias em Jobs do Rundeck</h1>
+      <p class="lead">O arquivo <code>/anomalies.json</code> é publicado pelo CI e servido na raiz do domínio pelo AWS Amplify.</p>
+    </div>
+    <div class="controls">
+      <a id="openJson" class="btn" target="_blank" rel="noopener">Abrir anomalies.json</a>
+      <a id="goJson" class="btn secondary" title="Redirecionar para o JSON">Redirecionar →</a>
+    </div>
+  </header>
+
+  <div class="card">
+    <div class="controls">
+      <input id="filter" type="text" placeholder="filtrar por projeto/job/status..." />
+      <span id="badge" class="pill">0 itens</span>
+      <button id="reload" class="btn secondary">Atualizar</button>
+    </div>
+    <table id="tbl">
+      <thead><tr>
+        <th>Data</th><th>Projeto</th><th>Job</th><th>Status</th><th>Duração (s)</th>
+        <th>Retries</th><th>CPU%</th><th>MEM%</th><th>Node</th><th>Erro</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+    <p id="msg" class="muted" style="margin-top:8px"></p>
+  </div>
+
+  <div class="card">
+    <h2 style="margin:0 0 8px 0">Como funciona a esteira</h2>
+    <div class="row">
+      <div>
+        <h3 style="margin:8px 0 6px">1) Coleta (n8n)</h3>
+        <ul>
+          <li>Cron agenda o fluxo.</li>
+          <li><strong>HTTP Request</strong> chama <code>/api/38/executions</code> do Rundeck.</li>
+          <li><strong>Function</strong> normaliza campos (id, horários, status, duração, erro, CPU/MEM, fila).</li>
+          <li><strong>GitHub</strong> faz append em <code>data/dados_rundeck.csv</code>.</li>
+        </ul>
+      </div>
+      <div>
+        <h3 style="margin:8px 0 6px">2) Detecção (GitHub Actions)</h3>
+        <ul>
+          <li>Ao receber push, executa <code>scripts/pipeline.py</code>.</li>
+          <li>ETL + features (dow/hour/is_weekend).</li>
+          <li>Detecta anomalias com <em>Z-score</em> por job + global (e opcional <em>IsolationForest</em>).</li>
+          <li>Gera <code>app/anomalies.json</code> (copiado para <code>data/</code>).</li>
+        </ul>
+      </div>
+      <div>
+        <h3 style="margin:8px 0 6px">3) Publicação (Amplify)</h3>
+        <ul>
+          <li>Artefatos em <code>app/</code> são **publicados na raiz**.</li>
+          <li>Regra de SPA mantém <code>/index.html</code>.</li>
+          <li>Regra explícita libera <code>/anomalies.json</code> sem rewrite.</li>
+        </ul>
+      </div>
+    </div>
+    <p class="muted" style="margin-top:8px">Variáveis: <code>RUNDECK_BASE_URL</code>, <code>RUNDECK_API_TOKEN</code>, <code>RUNDECK_PROJECT</code>, <code>ANOMALY_THRESHOLD</code>.</p>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-top:0">Estrutura do repositório</h3>
+<pre><code>app/
+  index.html
+  anomalies.json
+data/
+  dados_rundeck.csv
+  anomalies.json
+scripts/
+  simulate_data.py
+  pipeline.py
+  detect_anomalies.py
+.github/workflows/mlops.yml
+n8n/workflow_rundeck_to_github.json
+README.md
+</code></pre>
+  </div>
+
+  <script>
+    // Caminho ABSOLUTO para o JSON na raiz do domínio
+    const JSON_URL = '/anomalies.json';
+
+    const $ = (s) => document.querySelector(s);
+    const tbody = $('#tbl tbody');
+    const badge = $('#badge');
+    const msg = $('#msg');
+
+    async function load(){
+      msg.textContent = 'Carregando...';
+      tbody.innerHTML = '';
+      try {
+        const res = await fetch(JSON_URL, { cache: 'no-store', headers: { 'Cache-Control':'no-store' } });
+        const ct = (res.headers.get('content-type')||'').toLowerCase();
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        if (!ct.includes('application/json')) throw new Error('Conteúdo não é JSON (verifique rewrites).');
+        const data = await res.json();
+        render(data);
+      } catch (e) {
+        msg.textContent = 'Falha ao carregar ' + JSON_URL + ': ' + e.message;
+      }
+    }
+
+    function render(data){
+      const q = ($('#filter').value || '').toLowerCase();
+      const filtered = data.filter(r => JSON.stringify(r).toLowerCase().includes(q));
+      badge.textContent = filtered.length + ' itens';
+      tbody.innerHTML = '';
+      filtered.forEach(r => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${r.ts}</td><td>${r.project}</td><td>${r.job_name}</td><td>${r.status}</td>
+                        <td>${r.duration_sec}</td><td>${r.retries}</td><td>${r.cpu_pct}</td><td>${r.mem_pct}</td>
+                        <td>${r.node}</td><td>${(r.error_message||'').slice(0,80)}</td>`;
+        tbody.appendChild(tr);
+      });
+      msg.textContent = filtered.length ? '' : 'Sem itens para o filtro atual.';
+    }
+
+    $('#filter').addEventListener('input', () => load());
+    $('#reload').addEventListener('click', () => load());
+    document.getElementById('openJson').href = JSON_URL;
+    document.getElementById('goJson').href = JSON_URL;
+
+    // First load
+    load();
+  </script>
+</body>
+</html>

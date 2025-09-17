@@ -1,17 +1,26 @@
-#!/usr/bin/env python3
-import os, sys, subprocess
+import subprocess
+import sys
 
-BASE = os.path.join(os.path.dirname(__file__), "..")
+STEPS = [
+    ["python", "scripts/etl.py"],
+    ["python", "scripts/features.py"],
+    ["python", "scripts/train_rbm.py"],
+    ["python", "scripts/detect_anomalies.py"],
+]
 
 def run(cmd):
-    print("+", " ".join(cmd)); subprocess.check_call(cmd)
+    print(f"[pipeline] Executando: {' '.join(cmd)}")
+    p = subprocess.run(cmd, check=True)
+    return p.returncode
 
-run([sys.executable, os.path.join(BASE, "scripts", "etl.py")])
+def main():
+    for step in STEPS:
+        try:
+            run(step)
+        except subprocess.CalledProcessError as e:
+            print(f"[pipeline] Erro no passo: {' '.join(step)}")
+            sys.exit(e.returncode)
+    print("[pipeline] Concluído com sucesso. Saída: app/ai_analysis.json")
 
-try:
-    run([sys.executable, os.path.join(BASE, "scripts", "train_isoforest.py")])
-except Exception as e:
-    print("Aviso: não foi possível treinar IsolationForest. Seguindo com Z-score.", e)
-
-run([sys.executable, os.path.join(BASE, "scripts", "detect_anomalies.py")])
-print("Pipeline concluída.")
+if __name__ == "__main__":
+    main()

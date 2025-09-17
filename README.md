@@ -1,123 +1,264 @@
-# ESTEIRA_RUNDECK_AI.md — MLOps para Anomalias em Jobs do Rundeck (n8n + GitHub + Amplify)
+# N8N_POC — Análise de Falhas x Alto Tempo com RBM
 
-## 1) Objetivo
-Detectar **falhas e anomalias** nas execuções de jobs do Rundeck e publicar uma visão executiva em tempo quase real, usando **n8n** para coleta, **GitHub** para versionamento/CI e **AWS Amplify** para publicação do front-end estático.
+Este repositório implementa uma esteira **n8n → GitHub → GitHub Actions → RBM (Restricted Boltzmann Machine) → Painel estático (Amplify)** para detectar **eventos cruzados** entre **falhas** e **alto tempo de execução** em JOBs de schedulers (ex.: Rundeck). A saída executiva é o arquivo `app/ai_analysis.json`, consumido por um **painel estático** (`app/index.html`).
 
-## 2) Arquitetura & Fluxo
+> **Objetivo**: fornecer visibilidade rápida e acionável dos **hotspots** (jobs e projetos) que combinam **falha** e **runtime anormalmente alto**, priorizando correções e capacidade.
+
+---
+
+## Arquitetura (Mermaid)
+
 ```mermaid
 flowchart LR
-  %% ---- Coleta ----
-  subgraph A["Coleta & Ingestão"]
-    N8N["n8n (Cron + HTTP Request)"] --> RD[(Rundeck API)]
-    N8N -->|append CSV| GH[GitHub Repo<br/>data/dados_rundeck.csv]
+  %% Fontes
+  A[n8n<br/>Coleta via API do Scheduler] -->|CSV append| B[data/dados_rundeck.csv]
+
+  %% Pipeline de dados
+  subgraph P[Pipeline de Dados (GitHub Actions ou local)]
+    B --> C[ETL<br/>scripts/etl.py]
+    C --> D[Features & Scaling<br/>scripts/features.py]
+    D --> E[Treino RBM<br/>scripts/train_rbm.py]
+    E --> F[Detecção & Insights<br/>scripts/detect_anomalies.py]
   end
 
-  %% ---- CI/CD e Inferência ----
-  subgraph B["CI/CD, Treino & Detecção"]
-    GH -->|push| GHA["GitHub Actions"]
-    GHA --> PIPE["pipeline.py<br/>ETL + Features + Anomalias<br/>(IsolationForest/Z-score)"]
-    PIPE --> OUT1[("data/anomalies.json")]
-    PIPE --> OUT2[("app/anomalies.json")]
-    GHA -->|commit artifacts| GH
+  %% Artefatos gerados
+  F --> G[[app/ai_analysis.json]]
+  F --> H[(models/rbm.joblib)]
+  D --> I[(data/features.csv)]
+
+  %% Publicação
+  subgraph W[Web Static Hosting]
+    G --> J[App estático<br/>app/index.html + app/app.js + app/styles.css]
   end
 
-  %% ---- Publicação ----
-  subgraph C["Publicação & Consumo"]
-    GH --> AMP[AWS Amplify<br/>Build & Deploy]
-    AMP --> WEB[App estático<br/>index.html + anomalies.json]
-    WEB --> USERS[Operação 24x7 / Diretoria]
+  %% Usuário
+  J --> U[Executivos & Operação<br/>KPIs, Hotspots, Amostras]
+
+  %% DevOps
+  subgraph CI[CI/CD]
+    B -. push .-> P
+    P -. commit .-> G
+    G -. deploy .-> W
   end
-
-  classDef store fill:#EAF5FF,stroke:#357ABD,stroke-width:1px,color:#0A2540;
-  class GH,OUT1,OUT2 store;
-```
-**Pontos-chave**
-- **Dados brutos** em `data/dados_rundeck.csv` (coletados pelo n8n).
-- **Artefatos de inferência** em `app/anomalies.json` servidos pelo Amplify.
-- **CI/CD** dispara a pipeline a cada push (ou manualmente via `workflow_dispatch`).
-
-## 3) Fluxo da Esteira (passo a passo)
-1. **n8n (Coleta):**
-   - Trigger **Cron** (ex.: de hora em hora).
-   - **HTTP Request** → `GET {RUNDECK_BASE_URL}/api/38/executions?max=200&project={RUNDECK_PROJECT}` com header `X-Rundeck-Auth-Token`.
-   - **Function** (map) → transformar JSON em linhas (execution_id, projeto, job, início/fim, status, duração, recursos, erro).
-   - **GitHub** (create/update file) → *append* em `data/dados_rundeck.csv` (commit com mensagem padrão).
-2. **GitHub Actions (Detecção):**
-   - `on: push` → roda `scripts/pipeline.py`.
-   - **ETL + Features**; **IsolationForest** (se disponível) com fallback **Z-score** por job e global.
-   - Gera `app/anomalies.json` (e cópia em `data/`), commita e faz push.
-3. **AWS Amplify (Publicação):**
-   - Monitorando o repositório (branch `main`), **build + deploy** da pasta `app/`.
-   - **index.html** lê `anomalies.json` e oferece filtro simples (projeto/job/status).
-
-## 4) Estrutura de Repositório (proposta)
-```
-/
-  app/
-    index.html           # Front-end estático (Amplify)
-    anomalies.json       # Gerado pela pipeline (não editar manualmente)
-  data/
-    dados_rundeck.csv    # Coleta (n8n) ou simulação
-    anomalies.json       # Cópia para auditoria
-  n8n/
-    workflow_rundeck_to_github.json  # Export do fluxo n8n (opcional)
-  scripts/
-    etl.py               # Load/clean/parse
-    features.py          # Enriquecimento (dow/hour/weekend/etc.)
-    train_isoforest.py   # (opcional) Modelo IsolationForest
-    detect_anomalies.py  # Z-score + serialização anomalies.json
-    pipeline.py          # Orquestra: simula (se preciso) → detecta → grava artefatos
-    simulate_data.py     # Gera dados sintéticos p/ teste
-  .github/workflows/
-    mlops.yml            # CI/CD
-  requirements.txt
-  .env.example
-  README.md
 ```
 
-## 5) Variáveis de Ambiente
-- `RUNDECK_BASE_URL` — URL do Rundeck (ex.: `https://rundeck.example.com`)
-- `RUNDECK_API_TOKEN` — token de API (Header: `X-Rundeck-Auth-Token`)
-- `RUNDECK_PROJECT` — projeto padrão (ex.: `default`)
-- `ANOMALY_THRESHOLD` — Z-score (padrão `3.0`); para IsolationForest, usar `IFOREST_CONTAMINATION` (ex.: `0.03`)
-- **GitHub Actions/Amplify**: exportar as mesmas variáveis quando necessário
+---
 
-## 6) n8n (nós mínimos)
-- **Cron**: periodicidade (hora, 30 min, etc.).
-- **HTTP Request (Rundeck)**: GET, headers com token.
-- **Function (map)**: normaliza campos (id, horários ISO-8601, status, duração, erros, CPU/MEM/queue se houver).
-- **GitHub (file upsert/append)**: escreve/atualiza `data/dados_rundeck.csv` com commit automático.
+## Principais componentes
 
-> Observação: Caso a API do Rundeck retorne muito volume, paginar por `max`/`offset` e limitar à janela desejada (últimas N execuções).
+- **Coleta (n8n)**: fluxo que lê execuções do scheduler (ex.: Rundeck) e realiza *append* em `data/dados_rundeck.csv`.
+- **ETL (`scripts/etl.py`)**: normaliza campos, calcula `duration_sec`, trata datas e status.
+- **Features (`scripts/features.py`)**: cria variáveis (sazonalidade horária/semanal, *z-score* de duração por `job_name`), normaliza em [0,1] e gera alvos binários: `failed` e `high_runtime`.
+- **Treino RBM (`scripts/train_rbm.py`)**: treina uma `BernoulliRBM` sobre as features.
+- **Detecção/Insights (`scripts/detect_anomalies.py`)**: calcula **erro de reconstrução** → `risk_score`; cruza `failed` & `high_runtime`; gera KPIs, **hotspots** e **amostras** em `app/ai_analysis.json`.
+- **Painel (`app/index.html`)**: lê o JSON, exibe KPIs, gráficos (Chart.js) e tabelas. Mostra **badge de “Última atualização”** via `HEAD` (Last-Modified).
 
-## 7) CI/CD (GitHub Actions)
-- **Setup Python 3.11** + `pip install -r requirements.txt`.
-- Executa `python scripts/pipeline.py`.
-- **Commit** de `app/anomalies.json` e `data/anomalies.json` (idempotente).
+---
 
-### Resumo de lógica de detecção
-- **Sinais básicos**: `duration_sec`, `status`, `retries`, `queue_depth`, `cpu_pct`, `mem_pct`, `dow/hour/is_weekend`.
-- **Z-score**: outlier de duração por `job_project` + global; marca falhas explícitas (`status != succeeded`).
-- **IsolationForest (opcional)**: maior robustez para multivariáveis; `contamination ~ 3%` como padrão inicial.
+## Estrutura de pastas
 
-## 8) Front-end (Amplify)
-- Páginas estáticas (`app/`).
-- `index.html` lê `anomalies.json` e exibe tabela com **filtros** por texto.
-- Pode-se evoluir para gráficos de tendência (por job/projeto) e export CSV.
+```
+app/
+  index.html
+  app.js
+  styles.css
+data/
+  dados_rundeck.csv           # entrada (append pelo n8n)
+  clean.csv                   # saída do ETL
+models/
+  rbm.joblib                  # modelo treinado
+  feature_meta.json           # metadados de features/escala
+scripts/
+  etl.py
+  features.py
+  train_rbm.py
+  detect_anomalies.py
+  pipeline.py                 # orquestra a sequência
+```
 
-## 9) Simulação de Dados (para validação)
-- `python scripts/simulate_data.py` → cria `data/dados_rundeck.csv` com 90 dias, sazonalidade semanal + picos mensais + falhas/timeout.
-- `python scripts/pipeline.py` → gera `app/anomalies.json` e `data/anomalies.json`.
+---
 
-## 10) Operação, Qualidade & Alertas
-- **Métricas**: % anomalias por dia/job, MTTR estimado, taxa de falhas por horário, jobs mais críticos.
-- **Alertas**: opcional acionar n8n → e-mail/Slack quando `anomalies.json` acima de `X` itens no dia.
-- **Auditoria**: manter `data/` versionado; `anomalies.json` com timestamp e `execution_id`.
-- **SLO inicial**: atualização do painel ≤ 15 min após a execução do job.
+## Requisitos
 
-## 11) Próximos Passos
-1. Criar repositório GitHub e **habilitar Amplify** (branch `main`, pasta `app/`).  
-2. Importar workflow no **n8n** e setar credenciais/envs.  
-3. Adicionar **GitHub Actions** (`.github/workflows/mlops.yml`).  
-4. Rodar simulação local + primeiro push.  
-5. Validar `anomalies.json` no site do Amplify e ajustar limiares/modelos.
+- Python 3.10+ (Ubuntu 24.04 recomendado)
+- Dependências Python:
+  ```txt
+  pandas>=2.2.0
+  numpy>=1.26.0
+  scikit-learn>=1.4.0
+  scipy>=1.11.0
+  joblib>=1.3.0
+  python-dateutil>=2.9.0
+  ```
+
+- **Scheduler** (ex.: Rundeck) acessível via API.
+- **n8n** operando (Docker ou SaaS) para coleta.
+
+---
+
+## Variáveis de ambiente (`.env.example`)
+
+Crie um `.env` na raiz (não *commitar*) e exporte no ambiente de execução ou use o n8n Secrets:
+
+```bash
+# Fonte de dados
+INPUT_CSV=data/dados_rundeck.csv
+OUTPUT_CSV=data/clean.csv
+
+# Features / Modelo
+INPUT_CSV_CLEAN=data/clean.csv
+OUTPUT_CSV_FEATS=data/features.csv
+FEATURE_META=models/feature_meta.json
+MODEL_PATH=models/rbm.joblib
+RBM_COMPONENTS=32
+RBM_LR=0.01
+RBM_EPOCHS=50
+RBM_BATCH=64
+RBM_SEED=42
+Z_THRESHOLD=2.0   # z-score para classificar "alto runtime" por job
+
+# Saída web
+OUTPUT_JSON=app/ai_analysis.json
+TOP_N=20
+
+# n8n / Scheduler (ex.: Rundeck)
+RUNDECK_BASE_URL=https://<<host>>
+RUNDECK_API_TOKEN=<<token>>
+RUNDECK_PROJECT=<<nome-projeto>>
+```
+
+> **Dica**: no GitHub Actions/Amplify, use **Secrets** para credenciais (nunca exponha em `.env`).
+
+---
+
+## Esquema de dados esperado (`data/dados_rundeck.csv`)
+
+O ETL é tolerante a variações de nome de coluna. Campos alvo e aliases aceitos:
+
+| Campo alvo  | Aliases aceitos                              |
+|-------------|-----------------------------------------------|
+| job_id      | `job_id`, `id`, `execution_id`                |
+| job_name    | `job_name`, `name`, `job`                     |
+| project     | `project`, `project_name`                     |
+| status      | `status`, `result`, `state`                   |
+| start_time  | `start_time`, `started_at`, `start`           |
+| end_time    | `end_time`, `ended_at`, `end`, `finish_time`  |
+
+- Datas em ISO 8601 são preferidas. `duration_sec` é calculado como `end_time - start_time` (segundos).
+
+---
+
+## Como executar localmente
+
+1) Instale dependências:
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+2) Garanta `data/dados_rundeck.csv` com dados reais ou de teste.
+
+3) Rode o pipeline completo:
+```bash
+python scripts/pipeline.py
+```
+Saída final: `app/ai_analysis.json` (consumido pelo painel).
+
+4) Visualize o painel:
+```bash
+# Servir a pasta app/ em um server estático local
+python -m http.server --directory app 8080
+# abra http://localhost:8080
+```
+
+---
+
+## Integração CI/CD (exemplo GitHub Actions)
+
+`.github/workflows/mlops.yml` (exemplo mínimo):
+
+```yaml
+name: mlops-rbm
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'data/**'
+      - 'scripts/**'
+      - 'app/**'
+      - 'requirements.txt'
+jobs:
+  build-run-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: pip install -r requirements.txt
+      - name: Run pipeline
+        run: python scripts/pipeline.py
+      - name: Commit artifacts
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add app/ai_analysis.json data/clean.csv data/features.csv models/*
+          git commit -m "ci: update artifacts" || echo "No changes"
+          git push
+```
+
+> **Amplify Hosting**: a pasta `app/` é estática (HTML/CSS/JS). Opcionalmente use um `amplify.yml` simples apontando `app/` como raiz de artefatos.
+
+---
+
+## KPIs & Insights gerados
+
+- `summary.total_records` — total de execuções no período.
+- `summary.failed_count` — quantidade de falhas.
+- `summary.high_runtime_count` — quantidade de execuções com **alto tempo** (z-score > `Z_THRESHOLD` por job).
+- `summary.cross_events_count` e `cross_events_rate` — eventos em que **falha** e **alto tempo** ocorreram juntos.
+- `phi_failed_high_runtime` — **correlação phi** entre falha e alto tempo.
+- `lift_failed_given_high_runtime` — **lift** de falha condicionado a alto tempo.
+- `hotspots[]` — ranking `project/job_name` por volume de eventos cruzados, risco médio e p95.
+- `top_risk_samples[]` — amostras com maior `risk_score` para auditoria.
+
+---
+
+## Operação, SLOs e alertas
+
+- **SLO orientação**: ≤ 15 minutos entre ocorrência e exibição no painel.
+- **Alertas**: configurar no **n8n** um gatilho quando `cross_events_count` ou densidade diária exceder limiar.
+- **Versionamento**: `ai_analysis.json` é versionado a cada execução (diffs úteis para auditoria).
+
+---
+
+## Segurança e governança
+
+- Segredos via **GitHub Secrets** / **Amplify Environment Variables**.
+- Dados sensíveis: anonimizar `job_name`/`project` se necessário (hash ou mapeamento).
+- **Imutabilidade** de artefatos: preferir *append-only* para `dados_rundeck.csv` + *commits* frequentes.
+
+---
+
+## Troubleshooting
+
+- **`FileNotFoundError: data/dados_rundeck.csv`**: verifique se o n8n está populando ou crie uma massa de testes.
+- **Sem `ai_analysis.json`**: rode `python scripts/pipeline.py` e confirme permissões de escrita em `app/`.
+- **Mermaid não renderiza**: valide o bloco no Preview do GitHub; evite caracteres especiais e links dentro de nós.
+
+---
+
+## Roadmap (sugestões)
+
+- Ajuste adaptativo do `Z_THRESHOLD` por **perfil de job** (EWMA ou quantis históricos).
+- Score híbrido RBM + **Isolation Forest** para robustez.
+- Exportar métricas para **Prometheus** e alarmes no **Grafana**.
+- Enriquecimento com **custos** (FinOps) por job/projeto.
+
+---
+
+## Licença
+
+MIT (ou ajuste conforme necessidade da organização).
+

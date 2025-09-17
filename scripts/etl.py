@@ -1,77 +1,64 @@
-
-import os, glob
+import os
 import pandas as pd
-from pathlib import Path
+from dateutil import parser
 
-BASE = Path(__file__).resolve().parents[1]
+INPUT_CSV = os.getenv("INPUT_CSV", "data/dados_rundeck.csv")
+OUTPUT_CSV = os.getenv("OUTPUT_CSV", "data/clean.csv")
 
-def load_and_normalize(input_glob: str) -> pd.DataFrame:
-    files = sorted(glob.glob(input_glob))
-    if not files:
-        raise FileNotFoundError(f"Nenhum arquivo encontrado para o padrão: {input_glob}")
+def parse_dt(x):
+    if pd.isna(x):
+        return pd.NaT
+    try:
+        return parser.parse(str(x))
+    except Exception:
+        return pd.NaT
 
-    dfs = []
-    for fp in files:
-        # Try headered read; fallback to header=None with canonical names
-        try:
-            df = pd.read_csv(fp, sep=';', engine='python', dtype=str)
-            cols_lower = [c.strip().lower() for c in df.columns]
-            if not any('start' in c for c in cols_lower) or not any('end' in c for c in cols_lower):
-                raise ValueError('missing expected columns - fallback')
-        except Exception:
-            names = ['Job','Application','Sub-Application','Folder','Host','Ended Status','Start Time','End Time','Creation Date']
-            df = pd.read_csv(fp, sep=';', engine='python', header=None, names=names, dtype=str)
+def main():
+    if not os.path.exists(INPUT_CSV):
+        raise FileNotFoundError(f"Arquivo não encontrado: {INPUT_CSV}")
 
-        # Cleanup
-        df.columns = [c.strip() for c in df.columns]
-        for c in df.columns:
-            if df[c].dtype == object:
-                df[c] = df[c].astype(str).str.strip()
+    df = pd.read_csv(INPUT_CSV)
+    df.columns = [c.strip().lower() for c in df.columns]
 
-        # Host: drop leading "name:"
-        if 'Host' in df.columns:
-            df['Host'] = df['Host'].str.replace(r'^name:\s*', '', regex=True).str.strip()
+    colmap = {
+        "job_id": ["job_id", "id", "execution_id"],
+        "job_name": ["job_name", "name", "job"],
+        "project": ["project", "project_name"],
+        "status": ["status", "result", "state"],
+        "start_time": ["start_time", "started_at", "start"],
+        "end_time": ["end_time", "ended_at", "end", "finish_time"],
+    }
 
-        # Canonical names
-        rename_map = {
-            'Job':'job',
-            'Application':'application',
-            'Sub-Application':'sub_application',
-            'Folder':'folder',
-            'Host':'node',
-            'Ended Status':'status',
-            'Start Time':'start',
-            'End Time':'end',
-            'Creation Date':'created_date',
-        }
-        df = df.rename(columns=rename_map)
+    def pick(df, keys):
+        for k in keys:
+            if k in df.columns:
+                return df[k]
+        return pd.Series([None]*len(df))
 
-        # Parse dates
-        for col in ['start','end']:
-            df[col] = pd.to_datetime(df[col], format='%d/%m/%y %H:%M:%S', errors='coerce')
-        df['created_date'] = pd.to_datetime(df.get('created_date'), format='%d/%m/%y', errors='coerce')
+    out = pd.DataFrame()
+    for k, aliases in colmap.items():
+        out[k] = pick(df, aliases)
 
-        # Normalize status
-        df['status'] = df['status'].str.lower().map({
-            'succeed':'succeeded','success':'succeeded','ok':'succeeded',
-            'fail':'failed','failed':'failed','timeout':'timedout'
-        }).fillna(df['status'].str.lower())
+    out["start_time"] = out["start_time"].apply(parse_dt)
+    out["end_time"] = out["end_time"].apply(parse_dt)
+    out["duration_sec"] = (out["end_time"] - out["start_time"]).dt.total_seconds()
+    out["status"] = out["status"].astype(str).str.lower().str.strip()
+    out["status"] = out["status"].replace({
+        "succeeded": "success", "ok": "success", "successful": "success",
+        "fail": "failed", "error": "failed", "ko": "failed"
+    })
+    out = out.dropna(subset=["start_time"])
+    out["duration_sec"] = out["duration_sec"].fillna(0).clip(lower=0)
 
-        df['duration_sec'] = (df['end'] - df['start']).dt.total_seconds()
-        df['project'] = df['folder'].fillna('UNKNOWN')
-        df['job_name'] = df['job'].fillna('UNKNOWN')
-        df['job_project'] = df['project'] + '::' + df['job_name']
-        dfs.append(df)
+    out["date"] = out["start_time"].dt.date
+    out["hour"] = out["start_time"].dt.hour
+    out["weekday"] = out["start_time"].dt.weekday
+    out["job_name"] = out["job_name"].fillna("UNKNOWN")
+    out["project"] = out["project"].fillna("UNKNOWN")
 
-    out = pd.concat(dfs, ignore_index=True)
-    out = out.dropna(subset=['start','end','duration_sec'])
-    out = out[out['duration_sec'] >= 0]
-    (BASE / 'data').mkdir(exist_ok=True, parents=True)
-    out.to_csv(BASE / 'data' / 'dados_rundeck.csv', index=False)
-    return out
+    os.makedirs(os.path.dirname(OUTPUT_CSV), exist_ok=True)
+    out.to_csv(OUTPUT_CSV, index=False)
+    print(f"[etl] Gravado {OUTPUT_CSV} com {len(out)} linhas.")
 
-if __name__ == '__main__':
-    INPUT_GLOB = os.getenv('INPUT_GLOB', 'data/*.csv')
-    df = load_and_normalize(INPUT_GLOB)
-    print('Linhas normalizadas:', len(df))
-    print('Saída:', str((BASE / 'data' / 'dados_rundeck.csv')))
+if __name__ == "__main__":
+    main()
