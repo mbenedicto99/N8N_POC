@@ -9,12 +9,12 @@ Painel estático para **leitura operacional** de riscos em jobs (Rundeck): combi
 
 ```mermaid
 flowchart LR
-  subgraph User["🧑‍💻 Operação / Diretoria"]
+  subgraph User["Operação / Diretoria"]
     B[Browser<br/>index.html + app.js]
   end
 
   subgraph Hosting["CDN/Hosting estático"]
-    H[/Site estático<br/>(HTML, JS, CSS)/]
+    H["/Site estático<br/>(HTML, JS, CSS)/"]
     J[(/app/ai_analysis.json)]
   end
 
