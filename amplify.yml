@@ -1,0 +1,8 @@
+version: 1
+frontend:
+  phases:
+    preBuild: { commands: [ "echo no build" ] }
+    build:    { commands: [ "echo copy artifacts" ] }
+  artifacts:
+    baseDirectory: app
+    files: [ '**/*' ]
