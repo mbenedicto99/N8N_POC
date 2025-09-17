@@ -1,5 +1,8 @@
-sudo apt update
-sudo apt install -y python3 python3-venv python3-pip
+# no diretório do repo N8N_POC
+sudo apt-get update
+sudo apt-get install -y python3.12-venv python3-dev build-essential
+
+python -m pip install --upgrade pip setuptools wheel
 
 cd /home/mbenedicto/Documents/CanopusAI/N8N_POC
 python3 -m venv .venv
