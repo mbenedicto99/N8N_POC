@@ -14,7 +14,7 @@ flowchart LR
   A[n8n<br/>Coleta via API do Scheduler] -->|CSV append| B[data/dados_rundeck.csv]
 
   %% Pipeline de dados
-  subgraph P[Pipeline de Dados (GitHub Actions ou local)]
+  subgraph P["Pipeline de Dados (GitHub Actions ou local)"]
     B --> C[ETL<br/>scripts/etl.py]
     C --> D[Features & Scaling<br/>scripts/features.py]
     D --> E[Treino RBM<br/>scripts/train_rbm.py]
